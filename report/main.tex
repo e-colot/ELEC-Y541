@@ -1,0 +1,119 @@
+\documentclass[11pt,a4paper]{article}
+
+% Single-column layout (default for article)
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{setspace}
+\onehalfspacing
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{lipsum}
+
+\usepackage{float}
+\newfloat{listing}{htbp}{lol}
+\floatname{listing}{Listing}
+
+\lstdefinestyle{cppstyle}{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{red!60!black},
+  numbers=left,
+  numberstyle=\tiny,
+  stepnumber=1,
+  numbersep=8pt,
+  frame=single,
+  breaklines=true,
+  tabsize=2,
+  showstringspaces=false
+}
+
+\title{HLS implementation of an autoencoder scheme\\
+\large \textbf{ELEC-Y541} - Reconfigurable architectures}
+\author{%
+  Emmeran Colot
+}
+\date{2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+The objective of this report is to showcase the work done in an effort to implement an autoencoder architecture on an FPGA using high-level synthesis (HLS) tools. The model uses the MNIST dataset, consisting of 28x28 black and white pixels of handwritten numbers, and attempts to compress those images while minimizing the difference between the original image and the reconstructed one.
+
+A trained model, written with PyTorch, was already given and only inference had to be run on the final implementation. The model first had to be translated in C++, which is explained in Sec. \ref{sec:c++_implementation}. The resulting implementation then has been tuned with different synthesis directives, optimizing either the performances in Sec. \ref{sec:performance_optimization} or the area in Sec. \ref{sec:area_optimization}.
+
+\section{C++ Implementation}
+\label{sec:c++_implementation}
+
+\subsection{Auto-encoder Model Structure}
+The model consists of 4 encryption layers and 4 decryption layers. Each layer consists of a linear part where the input is multiplied by a \textit{weight} matrix, and then added to a \textit{bias} vector. This linear operation is then followed by an activation function, which is a rectified linear unit (ReLU) for all layers except for the output layer.
+
+Each layer can therefore be implemented by slightly calling \lstinline[style=cppstyle]{Layer} (given below) with the right sizes and weights/biasses. It can be mathematically summarized as
+\begin{equation}
+    y_i = \begin{cases}
+        0 \hspace{2.53cm} \text{if} \quad (\mathbf{W_{(i, :)}} \mathbf{u} + b_i) < 0\\
+        \mathbf{W_{(i, :)}} \mathbf{u} + b_i \qquad \text{otherwise},
+    \end{cases}
+\end{equation}
+where $\mathbf{u}$ and $\mathbf{y}$ are respectively the input and output vector, $\mathbf{W}$ the weight matrix and $\mathbf{b}$ the bias vector.
+
+\begin{listing}[htbp]
+    \begin{minipage}{\linewidth}
+        \begin{lstlisting}[style=cppstyle]
+        void Layer(float layerInput[MAX_SIZE],
+                float layerOutput[MAX_SIZE],
+                float weights[MAX_SIZE][MAX_SIZE],
+                float bias[MAX_SIZE],
+                int input_size,
+                int output_size) 
+            {
+            L0:for(int row = 0; row < output_size; row++) 
+                {
+                float tmp = bias[row];  // Start with bias
+                L1:for(int col = 0; col < input_size; col++) 
+                {
+                    tmp = tmp + weights[row][col] * layerInput[col];
+                }
+                // ReLu
+                layerOutput[row] = max(0.0f, tmp);
+                }
+            }
+        \end{lstlisting}
+    \end{minipage}
+\end{listing}
+
+\subsection{Layer Specialization}
+A first issue that arose from the basic approach of a single function called for every layer is the dynamic number of iterations in the \textbf{L0} and \textbf{L1} loops, which prevented loop unrolling. For this reason, each type of layer\footnote{a \textit{type of layer} designates a layer with a given input and output layer size, but 2 layers can still have the same function if their sizes match.} has a specific function with fixed sizes.
+
+\subsection{Parameters Sharing}
+A first version of the model passed weights and biasses to the function to accelerate as parameters. It was found in the optimization process that such method led to complicated interface handling. This has therefore been changed to pass the model parameters through a header file.
+
+\section{Performance Optimization}
+\label{sec:performance_optimization}
+
+\subsection{Inner Pipelining}
+The first step taken towards a performance-focussed implementation was to try pipelining the inner loop \textbf{L1}. However, because the model runs with a FP32 format, additions and multiplications are slow and this led to an initiation interval (II) of 3 and a clock period higher than the default one ($\approx 13.3$s). This is not an issue and the desired clock frequency simply has to be set to a larger value in order for the model to respect the constraints.
+
+\subsection{Outer Pipelining}
+By pipelining the outer loop \textbf{L0}, each element of the output vector is computed in parallel. This is a significant improvement of the interval time.
+
+\section{Area Optimization}
+\label{sec:area_optimization}
+
+\end{document}
