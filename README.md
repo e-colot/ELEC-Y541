@@ -1,1 +1,1 @@
-Creates a .cpp version of the python auto-encoder model.
+Creates a .cpp version of the python auto-encoder model, applied on the MNIST dataset.
