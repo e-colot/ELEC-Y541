@@ -12,29 +12,49 @@
 #define AE_NORM_MEAN  0.1307f
 #define AE_NORM_STD   0.3081f
 
-void AE(int imINPUT[MAX_HEIGHT][MAX_WIDTH], 
-    int imOUTPUT[MAX_HEIGHT][MAX_WIDTH]);
+void AE(
+    int imINPUT[MAX_HEIGHT][MAX_WIDTH], 
+    int imOUTPUT[MAX_HEIGHT][MAX_WIDTH],
+    const float enc1[HIDDEN_SIZE][INPUT_SIZE],
+    const float enc1_bias[HIDDEN_SIZE],
+    const float enc2[HIDDEN_SIZE][HIDDEN_SIZE],
+    const float enc2_bias[HIDDEN_SIZE],
+    const float enc3[HIDDEN_SIZE][HIDDEN_SIZE],
+    const float enc3_bias[HIDDEN_SIZE],
+    const float enc4[CODE_SIZE][HIDDEN_SIZE],
+    const float enc4_bias[CODE_SIZE],
+    const float dec1[HIDDEN_SIZE][CODE_SIZE],
+    const float dec1_bias[HIDDEN_SIZE],
+    const float dec2[HIDDEN_SIZE][HIDDEN_SIZE],
+    const float dec2_bias[HIDDEN_SIZE],
+    const float dec3[HIDDEN_SIZE][HIDDEN_SIZE],
+    const float dec3_bias[HIDDEN_SIZE],
+    const float dec4[INPUT_SIZE][HIDDEN_SIZE],
+    const float dec4_bias[INPUT_SIZE]
+);
 
-// Keeping input size as dimensions for both input and output as it is the largest
 void inputLayer(float layerInput[INPUT_SIZE],
             float layerOutput[HIDDEN_SIZE],
-            float weights[HIDDEN_SIZE][INPUT_SIZE],
-            float bias[HIDDEN_SIZE]);
+            const float weights[HIDDEN_SIZE][INPUT_SIZE],
+            const float bias[HIDDEN_SIZE]);
 void intermediateLayer(float layerInput[HIDDEN_SIZE],
             float layerOutput[HIDDEN_SIZE],
-            float weights[HIDDEN_SIZE][HIDDEN_SIZE],
-            float bias[HIDDEN_SIZE]);
+            const float weights[HIDDEN_SIZE][HIDDEN_SIZE],
+            const float bias[HIDDEN_SIZE]);
 void endEncryptionLayer(float layerInput[HIDDEN_SIZE],
             float layerOutput[CODE_SIZE],
-            float weights[CODE_SIZE][HIDDEN_SIZE],
-            float bias[CODE_SIZE]);
+            const float weights[CODE_SIZE][HIDDEN_SIZE],
+            const float bias[CODE_SIZE]);
 void startDecryptionLayer(float layerInput[CODE_SIZE],
             float layerOutput[HIDDEN_SIZE],
-            float weights[HIDDEN_SIZE][CODE_SIZE],
-            float bias[HIDDEN_SIZE]);
+            const float weights[HIDDEN_SIZE][CODE_SIZE],
+            const float bias[HIDDEN_SIZE]);
 void outputLayer(float layerInput[HIDDEN_SIZE],
             float layerOutput[INPUT_SIZE],
-            float weights[INPUT_SIZE][HIDDEN_SIZE],
-            float bias[INPUT_SIZE]);
+            const float weights[INPUT_SIZE][HIDDEN_SIZE],
+            const float bias[INPUT_SIZE]);
+
+void flatten(int imINPUT[MAX_HEIGHT][MAX_WIDTH], float layerInput[INPUT_SIZE]);
+void unflatten(float layerOutput[INPUT_SIZE], int imOUTPUT[MAX_HEIGHT][MAX_WIDTH]);
 
 #endif

@@ -25,3 +25,5 @@ report/build/
 # Keep generated PDFs in git
 !*.pdf
 !report/**/*.pdf
+.vscode
+.venv

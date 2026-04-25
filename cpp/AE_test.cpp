@@ -7,15 +7,15 @@
 #include "constant.h"
 
 // I/O Image Path
-#define INPUT_IMAGE_BASE "digit0.bmp"
-#define OUTPUT_IMAGE_BASE "outputAE.bmp"
+#define INPUT_IMAGE_BASE "Test_Images/digit7.bmp"
+#define OUTPUT_IMAGE_BASE "outputAE_7.bmp"
 
 int in_pix[MAX_HEIGHT][MAX_WIDTH];
 int out_pix[MAX_HEIGHT][MAX_WIDTH];
 
 int main() {
     std::cout << "=======================================================" << std::endl;
-    std::cout << "--------- Simulation satrted ---------" << std::endl<< std::endl;
+    std::cout << "--------- Simulation started ---------" << std::endl<< std::endl;
 
     // Load input image
     image::BMPMini bmp(INPUT_IMAGE_BASE);
@@ -32,7 +32,7 @@ int main() {
     int out[MAX_HEIGHT][MAX_WIDTH];
     
     // Apply auto-encoder
-    AE(in_pix, out_pix);
+    AE(in_pix, out_pix, enc1, enc1_bias, enc2, enc2_bias, enc3, enc3_bias, enc4, enc4_bias, dec1, dec1_bias, dec2, dec2_bias, dec3, dec3_bias, dec4, dec4_bias);
 
     // Write back the output image to the file
     for (int x = 0; x < MAX_HEIGHT; x++) {
