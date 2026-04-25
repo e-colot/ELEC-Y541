@@ -73,7 +73,6 @@ Each layer can therefore be implemented by calling \lstinline[style=cppstyle]{La
 where $\mathbf{u}$ and $\mathbf{y}$ are respectively the input and output vector, $\mathbf{W}$ the weights matrix and $\mathbf{b}$ the bias vector.
 
 \begin{listing}[htbp]
-\label{lst:layer_nostream}
 \begin{minipage}{\linewidth}
 \begin{lstlisting}[style=cppstyle]
 void Layer(float layerInput[IN_SIZE],
@@ -97,10 +96,9 @@ A first issue that arose from the basic approach of a single function called for
 
 \subsection{Stream Model}
 \label{sec:stream_model}
-For area optimization, FIFOs should be used whenever possible. To allow to have only FIFOs in a layer, each input and output must be read from / written to a single time and in a sequential order. For this reason, \lstinline[style=cppstyle]{Layer} has been written with a buffer for the input as it was the only variable being used not sequentially
+For area optimization, FIFOs should be used whenever possible. To allow to have only FIFOs in a layer, each input and output must be read from / written to a single time and in a sequential order. For this reason, \lstinline[style=cppstyle]{Layer} has been written with a buffer for the input as it was the only variable being used not sequentially.
 
 \begin{listing}[htbp]
-\label{lst:layer_stream}
 \begin{minipage}{\linewidth}
 \begin{lstlisting}[style=cppstyle]
 void Layer(float layerInput[IN_SIZE],
@@ -126,12 +124,12 @@ void Layer(float layerInput[IN_SIZE],
 \end{listing}
 
 \subsection{Autoencoder Code}
-Apart from the layers, the full code contains a first flattening operation, which converts the loaded image from a 28x28 matrix into a single vector of 784 elements and that removes the input mean and variance. \\
-The opposite is applied at the output, reshaping it in a matrix. Those two functions are not shown here as they don't bring anything useful to the report.
+Apart from the layers, the full code contains a first flattening operation in the function \textit{flatten}, which converts the loaded image from a 28x28 matrix into a single vector of 784 elements and that removes the input mean and variance. \\
+The opposite operation, applied by the function \textit{unflatten} is applied at the output, reshaping it in a matrix. 
 
 \section{Layer-wise Optimization}
 \label{sec:layerwise_optimization}
-Before optimizing the whole model, a single layer was optimized using hls directives. This gave a more precise understanding of the impact of the used directives.
+Before optimizing the whole model, a single layer was optimized using HLS directives. This gave a more precise understanding of the impact of the used directives.
 
 \subsection{Baseline}
 The baseline was taken by disabling pipelining and loop flattening on both \textbf{L0} and \textbf{L1} loops. It used the code introduced in Sec. \ref{sec:layer_specialization}.
@@ -155,6 +153,7 @@ An iteration of the whole loop taking 9 cycles, the pipelining should result in 
 
 \textbf{L0} can be pipelined in order to reduce the interval. This will unroll the inner loop as a pipelined loop must not contain any other loop. The function will now compute a new row of the output at each cycle, making the interval drop to \textit{OUT\_SIZE}\footnote{equal to 256 here}. \\
 Because \textbf{L1} is unrolled, each of its iterations is performed simultaneously. This means \textit{weights} and \textit{layerInput} should have multiple read operations happening at the same cycle. To do so, these arrays are partitioned along the accessed dimension, which is the first one for the input layer and the second one for the weights matrix. \\
+Their interface is then set to be 1-port RAMs, allowing a single access per cycle. There is no need for more as only a single read is needed. \\
 The resulting latency can be computed as the number of pipeline stages, to which the number of cycles of a single stage must be added. Fig. \ref{fig:layer_outer_pipelining_ii} gives an insight on how the inner loop has been flattened. As the operation is a multiplication followed by a sum, each input row is multiplied with the corresponding weight and is then added to the sum computed by the previous input row.
 
 \begin{figure}[H]
@@ -178,7 +177,7 @@ The 4 versions, differing only in the synthesis directives for the first 3 and w
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{pictures/layer_results.png}
-    \caption{Result of the different versions for a single layer.}
+    \caption{Result of the different designs for a single layer.}
     \label{fig:layer_results}
 \end{figure}
 
@@ -197,16 +196,107 @@ Table \ref{tab:layer_performance_improvement} gives the improvement of each desi
         Interval & 33.88\% & 0.04\% & 110.76\% \\
         Latency & 33.88\% & 0.22\% & 110.76\% \\
         \midrule
-        DSP & 100.00\% & 256.40\% & 100.00\% \\
-        FF & 101.10\% & 263.40\% & 85.35\% \\
-        LUT & 107.11\% & 159.33\% & 97.77\% \\
+        DSP & $\times 1$ & $\times 2.56$ & $\times 1$ \\
+        FF & $\times 1.01$ & $\times 2.63$ & $\times 0.85$ \\
+        LUT & $\times 1.07$ & $\times 1.59$ & $\times 0.97$ \\
         \bottomrule
     \end{tabular}
 \end{table}
 
+\subsection{About synthesis warnings}
+\begin{itemize}
+    \item The inner pipelining produced two warnings, telling the pipelined loop could reach an II of 1 and setting the synthesis directive to a target II of 3 resolved them.
+    \item The FIFO implementation produced four warnings, one for each list that has been implemented as a FIFO. Those simply remind the designer to make sure the data is accessed in a sequential order, which has been checked here.
+\end{itemize}
 
 \section{AE Optimization}
 \label{sec:ae_optimization}
 
-\end{document}
+The \textit{flatten} and \textit{unflatten} methods are similar in their structure to the other layers so the HLS directives used on those are the same. 
 
+\subsection{Baseline}
+The baseline uses layers as defined in Sec. \ref{sec:layer_specialization}. Pipelining and loop unrolling is disabled and all function inlining is also prohibited. \\
+Because the top module \textit{AE} calls multiple functions, the synthesis tool gives performance statistics for each subfunction, as shown in Fig. \ref{fig:AE_baseline_function_repartition}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{pictures/AE_baseline_function_repartition.png}
+    \caption{Performances statistics for baseline AE.}
+    \label{fig:AE_baseline_function_repartition}
+\end{figure}
+
+Because of the huge size of the input and output images (784 pixels), the layers at the boundaries of the model have the worst timing performance when no optimization is applied.
+
+\subsection{Performance Oriented}
+
+\subsubsection{Outer Loop Pipelining}
+Based on the results for a single layer, it is known that pipelining the outer loop of each layer will give the best performances. By applying the same directives (pipeline + reshape + 1 port RAM) to \textit{flatten} and \textit{unflatten}, all loops are pipelined in the most aggressive manner, yielding the best performances for the design.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{pictures/AE_outer_pipeline_function_repartition.png}
+    \caption{Performances statistics for outer loop pipelined AE.}
+    \label{fig:AE_outer_pipeline_function_repartition}
+\end{figure}
+
+Fig. \ref{fig:AE_outer_pipeline_function_repartition} shows that each layer's interval is now equal to its output size, meaning the limiting operation of the whole model is the output layer with an interval of 785 cycles. However, Fig. \ref{fig:AE_results} shows the interval is not the same as the slowest step of the design but equal to $12.403$. This number is approximately found by summing the latency of each layer\footnote{where the intermediateLayer latency is multiplied by 4 as the function is used 4 times}: $55 + 3399 + 4 \times 1287 + 1159 + 775 + 1813 + 34 = 12.383$.\\
+This means the design waits for an input to have passed through all the layers before accepting a new one.
+
+\subsection{Dataflow}
+Applying the dataflow directive on the top module goes one step further as it will optimize how data is transmitted from a function to another and will pipeline the dataflow with one pipeline stage being defined by a function. \\
+Taking a quick look at Fig. \ref{fig:AE_dataflow_function_repartition}, it can immediately be seen that the intermediate layer is now implemented 4 times, once per call. Also, the dataflow directive gained one interval cycle fro each function.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{pictures/AE_dataflow_function_repartition.png}
+    \caption{Performances statistics for dataflow AE.}
+    \label{fig:AE_dataflow_function_repartition}
+\end{figure}
+
+The most important result being the interval of the whole AE function which dropped, as expected, to the one of the slowest subfunction, as showed again in Fig. \ref{fig:AE_results}.
+
+\subsection{Area Oriented}
+
+For area optimization, nothing new has been added compared to the single layer design. Loops stay as such and FIFOs are placed everywhere as all arrays are used in a sequential manner.
+
+\subsection{Results}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{pictures/AE_results.png}
+    \caption{Result of the different designs for a single layer.}
+    \label{fig:AE_results}
+\end{figure}
+
+The improvement with regards to the baseline design are summarized in Table \ref{tab:AE_performance_improvement}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Performance Improvement Relative to Baseline}
+    \label{tab:AE_performance_improvement}
+    \begin{tabular}{l|ccc}
+        \toprule
+        &\textbf{Outer Pipelining} & \textbf{Dataflow} & \textbf{FIFOs} \\
+        \midrule
+        Interval & 0.19\% & 0.01\% & 122.10\% \\
+        Latency & 0.19\% & 0.19\% & 122.10\% \\
+        \midrule
+        DSP & $\times 520$ & $\times 1238$ & $\times 1$ \\
+        FF & $\times 321.3$ & $\times 970$ & $\times 0.99$ \\
+        LUT & $\times 104.4$ & $\times 295.8$ & $\times 0.95$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Once again, the FIFO design has improved the area with regards to the baseline whereas the design with the best performances is the dataflow one.
+
+\subsection{About synthesis warnings}
+\begin{itemize}
+    \item The dataflow design presents 2 warnings regarding the clock target. Running the synthesis took close to 6 hours so it hasn't been run again with the patch, which consists of setting the target clock to 11ns as it now reaches 10.185ns (with the uncertainty).
+    \item The dataflow design also warns the designer that deadlocks can occur, meaning a new input could interfere with the remainder of the previous data in the pipeline. A possible solution would be to add a cycle of interval to leave 1 cycle more than what is needed to avoid such issues.
+    \item The FIFOs design warns about the 18 interfaces implemented as buffers but those are indeed called in a sequential order so there is no need to investigate the warning.
+\end{itemize}
+
+
+
+\end{document}
